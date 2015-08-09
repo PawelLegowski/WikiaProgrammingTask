@@ -57,14 +57,20 @@ public class MainActivity extends Activity {
 		String name;
 		String URL;
 		String hub;
+		int	ID;
 		Bitmap image;
 		
-		public WikiaEntry(String aName, String aUrl, String aHub, Bitmap aImage) {
+		public WikiaEntry(String aName, String aUrl, String aHub, int aID) {
 			name = aName;
 			URL = aUrl;
 			hub = aHub;
-			image = aImage;
+			ID = aID;
+			image = null;
 		}	
+		
+		public void setBitmap(Bitmap aBitmap){
+			image = aBitmap;
+		}
 	}
 	
 	protected class getWikiaEntries extends AsyncTask<Void, Void, Vector<WikiaEntry>> {
@@ -85,13 +91,14 @@ public class MainActivity extends Activity {
 		
 		@Override
 		protected Vector<WikiaEntry> doInBackground(Void... params) {
-			Bitmap tempImage = null;
 			String tempName = "", tempUrl = "", tempHub = "";
+			int tempId;
+			WikiaEntry tempWikiaEntry;
 			Vector<WikiaEntry> ansWikiaEntries = new Vector<WikiaEntry>();
 			//Getting JSON Object
 			HttpClient httpClient = new DefaultHttpClient();
 			HttpContext localContext = new BasicHttpContext();
-			String qURL = "http://www.wikia.com/api/v1/Wikis/List?expand=1&batch="+String.valueOf(currentBatch)+"&limit="+String.valueOf(ENTRIES_PER_BATCH);
+			String qURL = "http://www.wikia.com/api/v1/Wikis/List?batch="+String.valueOf(currentBatch)+"&limit="+String.valueOf(ENTRIES_PER_BATCH);
 			HttpGet httpGet = new HttpGet(qURL);
 			
 			JSONObject jsObject = null;
@@ -135,51 +142,106 @@ public class MainActivity extends Activity {
 				tempJsArray = jsObject.getJSONArray("items");				
 				int i = 0;
 				while(i<ENTRIES_PER_BATCH)			//JSONException at end of JsArray will break loop
-				{
-					tempJsObject = tempJsArray.getJSONObject(i);									
+				{					
+					tempJsObject = tempJsArray.getJSONObject(i);
 					tempName = tempJsObject.getString("name");
 					tempUrl = tempJsObject.getString("domain");
 					tempHub = tempJsObject.getString("hub");
-					
-					//Trying to download wordmark
-					try 
-					{
-						String imageUrl = tempJsObject.getString("wordmark");
-						int response = -1;
-						URL url = new URL(imageUrl);
-						URLConnection conn = url.openConnection();
-					
-						if (!(conn instanceof HttpURLConnection))
-							throw new IOException("Not an HTTP connection");
-						HttpURLConnection httpConn = (HttpURLConnection) conn;
-						httpConn.setAllowUserInteraction(false);
-						httpConn.setInstanceFollowRedirects(true);
-						httpConn.setRequestMethod("GET");
-						httpConn.connect();
-					
-						response = httpConn.getResponseCode();
-						InputStream in = null;
-						if (response == HttpURLConnection.HTTP_OK) 
-						{
-							in = httpConn.getInputStream();
-						}
-						tempImage = BitmapFactory.decodeStream(in);
-						in.close();
-					} 
-					catch (Exception e) 
-					{
-						tempImage = null;
-						e.printStackTrace();
-					}
-					//Adding new entry to List
-					WikiaEntry wikiaEntry = new WikiaEntry(tempName,tempUrl,tempHub,tempImage);				
-					ansWikiaEntries.add(wikiaEntry);									
+					tempId = tempJsObject.getInt("id");
+					WikiaEntry wikiaEntry = new WikiaEntry(tempName,tempUrl,tempHub,tempId);				
+					ansWikiaEntries.add(wikiaEntry);
 					i++;
 				}
 			}
 			catch (JSONException e) {
 				e.printStackTrace();
-			}	
+			}
+			
+			
+			qURL = "http://www.wikia.com/api/v1/Wikis/Details?ids=";
+			
+			Iterator<WikiaEntry> iteratorWikiaEntry = ansWikiaEntries.iterator();
+			while(iteratorWikiaEntry.hasNext())
+			{
+				qURL = qURL + Integer.toString(iteratorWikiaEntry.next().ID) +",";
+			}
+			qURL = qURL.substring(0, qURL.length()-1);		
+			
+			
+			httpGet = new HttpGet(qURL);
+			try 
+			{
+				HttpResponse response = httpClient.execute(httpGet,localContext);
+				HttpEntity entity = response.getEntity();
+
+				if (entity != null) 
+				{
+					InputStream inputStream = entity.getContent();
+					Reader in = new InputStreamReader(inputStream);		
+					BufferedReader bufferedreader = new BufferedReader(in);
+					StringBuilder stringBuilder = new StringBuilder();
+					String stringReadLine = null;
+					while ((stringReadLine = bufferedreader.readLine()) != null) 
+					{
+						stringBuilder.append(stringReadLine);
+					}
+					jsObject = new JSONObject(stringBuilder.toString());
+				}
+
+			}
+			catch(Exception e)
+			{				
+				e.printStackTrace();
+				handler.post(new Runnable()
+				{
+					public void run() {Toast.makeText(getBaseContext(), getResources().getString(R.string.connection_problem), Toast.LENGTH_SHORT).show();};									
+				});
+				return ansWikiaEntries;
+			}
+			
+			try {
+				jsObject = jsObject.getJSONObject("items");
+			} catch (JSONException e1) {
+				e1.printStackTrace();
+			}
+			
+			iteratorWikiaEntry = ansWikiaEntries.iterator();
+			while(iteratorWikiaEntry.hasNext())
+			{
+				try {
+					tempWikiaEntry = iteratorWikiaEntry.next();
+					tempJsObject = jsObject.getJSONObject(Integer.toString(tempWikiaEntry.ID));					
+					//Trying to download wordmark			
+					String imageUrl = tempJsObject.getString("wordmark");
+					int response = -1;
+					URL url = new URL(imageUrl);
+					URLConnection conn = url.openConnection();
+				
+					if (!(conn instanceof HttpURLConnection))
+						throw new IOException("Not an HTTP connection");
+					HttpURLConnection httpConn = (HttpURLConnection) conn;
+					httpConn.setAllowUserInteraction(false);
+					httpConn.setInstanceFollowRedirects(true);
+					httpConn.setRequestMethod("GET");
+					httpConn.connect();
+				
+					response = httpConn.getResponseCode();
+					InputStream in = null;
+					if (response == HttpURLConnection.HTTP_OK) 
+					{
+						in = httpConn.getInputStream();
+					}
+					tempWikiaEntry.setBitmap(BitmapFactory.decodeStream(in));
+					in.close();
+				} 
+				catch (Exception e) 
+				{
+					e.printStackTrace();
+				}
+			
+			}
+			
+			//Adding new entry to List
 			return ansWikiaEntries;
 		}
 		
