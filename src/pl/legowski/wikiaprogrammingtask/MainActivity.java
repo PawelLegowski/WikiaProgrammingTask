@@ -118,7 +118,8 @@ public class MainActivity extends Activity {
 					{
 						stringBuilder.append(stringReadLine);
 					}
-					jsObject = new JSONObject(stringBuilder.toString());
+					inputStream.close();
+					jsObject = new JSONObject(stringBuilder.toString());					
 				}
 
 			}
@@ -185,7 +186,8 @@ public class MainActivity extends Activity {
 					{
 						stringBuilder.append(stringReadLine);
 					}
-					jsObject = new JSONObject(stringBuilder.toString());
+					inputStream.close();
+					jsObject = new JSONObject(stringBuilder.toString());					
 				}
 
 			}
